@@ -1,0 +1,116 @@
+# 
+
+parameters:
+  - name: enviroment
+    displayName: ENVIRONMENT
+    type: string
+    default: dev
+    values:
+      - dev
+      - prod
+
+
+variables:
+  # Service connections
+  - name: dev_svc
+    value: 'dev-svc-todo'
+  - name: prod_svc
+    value: 'todo-svc-prod'
+
+  - name: selected_svc
+    ${{ if eq(parameters.enviroment, 'prod') }}:
+      value: 'todo-svc-prod'
+    ${{ else }}:
+      value: 'dev-svc-todo'
+
+  # Backend Storage Account
+  - name: dev_backend
+    value: 'devtodo'
+  - name: prod_backend
+    value: 'azurepipeline123'
+  - name: select_backend
+    ${{ if eq(parameters.enviroment, 'prod') }}:
+      value: 'azurepipeline123'
+    ${{ else }}:
+      value: 'devtodo'
+
+  # Container
+  - name: dev_cont
+    value: 'todo-dev-cont'
+  - name: prod_cont
+    value: 'azure'
+  - name: select_container
+    ${{ if eq(parameters.enviroment, 'prod') }}:
+      value: 'azure'
+    ${{ else }}:
+      value: 'todo-dev-cont'
+
+
+
+pool:
+  name: test-pool
+
+trigger: none
+
+stages:
+  - stage: terraforminit
+    displayName: TERRAFORM INIT
+    jobs:
+      - job: InitJob
+        displayName: "Init Job"
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/env/${{ parameters.enviroment }}'
+              backendServiceArm: '$(selected_svc)'
+              backendAzureRmStorageAccountName: '$(select_backend)'
+              backendAzureRmContainerName: '$(select_container)'
+              backendAzureRmKey: '${{ parameters.enviroment }}.terraform.tfstate'
+
+  - stage: terraformplan
+    displayName: TERRAFORM PLAN
+    dependsOn: terraforminit
+    jobs:
+      - job: TerraformPlan
+        displayName: "Terraform Plan Job"
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/env/${{ parameters.enviroment }}'
+              backendServiceArm: '$(selected_svc)'
+              backendAzureRmStorageAccountName: '$(select_backend)'
+              backendAzureRmContainerName: '$(select_container)'
+              backendAzureRmKey: '${{ parameters.enviroment }}.terraform.tfstate'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/env/${{ parameters.enviroment }}'
+              environmentServiceNameAzureRM: '$(selected_svc)'
+
+  - stage: terraformapply
+    displayName: TERRAFORM APPLY
+    dependsOn: terraformplan
+    jobs:
+      - job: TerraformApply
+        displayName: "Terraform Apply Job"
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/env/${{ parameters.enviroment }}'
+              backendServiceArm: '$(selected_svc)'
+              backendAzureRmStorageAccountName: '$(select_backend)'
+              backendAzureRmContainerName: '$(select_container)'
+              backendAzureRmKey: '${{ parameters.enviroment }}.terraform.tfstate'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/env/${{ parameters.enviroment }}'
+              environmentServiceNameAzureRM: '$(selected_svc)'
